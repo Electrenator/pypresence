@@ -29,7 +29,7 @@ def get_ipc_path(pipe=None):
         ipc = f"{ipc}{pipe}"
 
     if sys.platform in ('linux', 'darwin'):
-        xdg_runtime_dir = os.environ.get('XDG_RUNTIME_DIR') # Runtime dir set by GUI enviroment
+        xdg_runtime_dir = os.environ.get('XDG_RUNTIME_DIR') # Runtime dir set by GUI environment
         users_runtime_dir = f"/run/user/{os.getuid()}" # Possible location for user's runtime
 
         if xdg_runtime_dir:
