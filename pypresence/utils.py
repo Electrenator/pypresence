@@ -29,20 +29,35 @@ def get_ipc_path(pipe=None):
         ipc = f"{ipc}{pipe}"
 
     if sys.platform in ('linux', 'darwin'):
-        tempdir = (os.environ.get('XDG_RUNTIME_DIR') or tempfile.gettempdir())
-        paths = ['.', 'snap.discord', 'app/com.discordapp.Discord', 'app/com.discordapp.DiscordCanary']
+        xdg_runtime_dir = os.environ.get('XDG_RUNTIME_DIR') # Runtime dir set by GUI enviroment
+        users_runtime_dir = f"/run/user/{os.getuid()}" # Possible location for user's runtime
+
+        if xdg_runtime_dir:
+            tempdir = xdg_runtime_dir
+        elif os.path.exists(users_runtime_dir):
+            # Runtime directory check `/run/user/[UID]` as fix for #216
+            tempdir = users_runtime_dir
+        else:
+            tempdir = tempfile.gettempdir()
+
+        paths = ['.', 'snap.discord', 'app/com.discordapp.Discord']
+        del users_runtime_dir
+        del xdg_runtime_dir
     elif sys.platform == 'win32':
         tempdir = r'\\?\pipe'
         paths = ['.']
     else:
         return
-    
+
     for path in paths:
         full_path = os.path.abspath(os.path.join(tempdir, path))
-        if sys.platform == 'win32' or os.path.isdir(full_path):
-            for entry in os.scandir(full_path):
-                if entry.name.startswith(ipc) and os.path.exists(entry):
-                    return entry.path
+
+        if not (sys.platform == 'win32' or os.path.isdir(full_path)):
+            continue
+
+        for entry in os.scandir(full_path):
+            if entry.name.startswith(ipc):
+                return entry.path
 
 
 def get_event_loop(force_fresh=False):
