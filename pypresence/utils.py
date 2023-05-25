@@ -6,6 +6,7 @@ import sys
 import tempfile
 import time
 
+from typing import Tuple, List, Optional
 from .exceptions import PyPresenceException
 
 
@@ -22,38 +23,51 @@ def remove_none(d: dict):
     return d
 
 
+def _get_probable_discord_path() -> Tuple[Optional[str], List[str]]:
+    """
+    Gets the probable locations for the Discord IPC to be located at.
+
+    Returns: Tuple with a possible pipe paths and a list of Discord ipc folder names
+    """
+    if sys.platform in ('linux', 'darwin'):
+        folder_names = ['.', 'snap.discord', 'app/com.discordapp.Discord', 'app/com.discordapp.DiscordCanary']
+
+        xdg_runtime_dir = os.environ.get('XDG_RUNTIME_DIR') # Runtime dir set by GUI environment
+        if xdg_runtime_dir:
+            return xdg_runtime_dir, folder_names
+
+        users_runtime_dir = f"/run/user/{os.getuid()}" # Possible location for user's runtime
+        if os.path.exists(users_runtime_dir):
+            # Runtime directory check as fix for #216
+            return users_runtime_dir, folder_names
+
+        return tempfile.gettempdir(), folder_names
+
+    elif sys.platform == 'win32':
+        return r'\\?\pipe', ['.']
+
+    return None, [] # No known Discord locations for used OS. Probably never gets here
+
+
 # Returns on first IPC pipe matching Discord's
 def get_ipc_path(pipe=None):
     ipc = 'discord-ipc-'
     if pipe:
         ipc = f"{ipc}{pipe}"
 
-    if sys.platform in ('linux', 'darwin'):
-        tempdir = os.environ.get('XDG_RUNTIME_DIR') # Runtime dir set by Linux GUI environment
-        paths = ['.', 'snap.discord', 'app/com.discordapp.Discord', 'app/com.discordapp.DiscordCanary']
-        users_runtime_dir = f"/run/user/{os.getuid()}" # Possible location for Linux user's runtime
-
-        if tempdir:
-            pass # No overwrite needed, can probably trust the set XDG_RUNTIME_DIR variable
-        elif os.path.exists(users_runtime_dir):
-            # Runtime directory check as fix for #216
-            tempdir = users_runtime_dir
-        else:
-            tempdir = tempfile.gettempdir()
-
-        del users_runtime_dir
-    elif sys.platform == 'win32':
-        tempdir = r'\\?\pipe'
-        paths = ['.']
-    else:
+    tmp_dir, folder_names = _get_probable_discord_path()
+    if tmp_dir is None or len(folder_names) == 0:
         return
-    
-    for path in paths:
-        full_path = os.path.abspath(os.path.join(tempdir, path))
-        if sys.platform == 'win32' or os.path.isdir(full_path):
-            for entry in os.scandir(full_path):
-                if entry.name.startswith(ipc) and os.path.exists(entry):
-                    return entry.path
+
+    for folder in folder_names:
+        full_path = os.path.abspath(os.path.join(tmp_dir, folder))
+
+        if not (sys.platform == 'win32' or os.path.isdir(full_path)):
+            continue
+
+        for entry in os.scandir(full_path):
+            if entry.name.startswith(ipc) and os.path.exists(entry):
+                return entry.path
 
 
 def get_event_loop(force_fresh=False):
